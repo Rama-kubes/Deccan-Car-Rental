@@ -118,17 +118,7 @@ export async function GET(request) {
       return NextResponse.json({ success: true, data: cars });
     }
 
-    // Get single car (public)
-    if (path.startsWith('/cars/') && path.split('/').length === 3) {
-      const carId = path.split('/')[2];
-      const car = await db.collection('cars').findOne({ _id: carId });
-      if (!car) {
-        return NextResponse.json({ success: false, error: 'Car not found' }, { status: 404 });
-      }
-      return NextResponse.json({ success: true, data: car });
-    }
-
-    // Check car availability by date range (public)
+    // Check car availability by date range (public) - MUST come before /cars/{carId}
     if (path === '/cars/availability') {
       const startDate = url.searchParams.get('startDate');
       const endDate = url.searchParams.get('endDate');
@@ -175,6 +165,91 @@ export async function GET(request) {
       );
 
       return NextResponse.json({ success: true, data: availableCars });
+    }
+
+    // Get single car (public)
+    if (path.startsWith('/cars/') && path.split('/').length === 3) {
+      const carId = path.split('/')[2];
+      const car = await db.collection('cars').findOne({ _id: carId });
+      if (!car) {
+        return NextResponse.json({ success: false, error: 'Car not found' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, data: car });
+    }
+
+    // Get available vehicles for a specific reservation (for assignment dropdown)
+    if (path === '/reservations/available-vehicles') {
+      const reservationId = url.searchParams.get('reservationId');
+      const startDate = url.searchParams.get('startDate');
+      const endDate = url.searchParams.get('endDate');
+
+      if (!startDate || !endDate) {
+        return NextResponse.json({ success: false, error: 'Start date and end date are required' }, { status: 400 });
+      }
+
+      const requestStart = new Date(startDate);
+      const requestEnd = new Date(endDate);
+
+      // Get all cars with status 'available'
+      const allCars = await db.collection('cars').find({ status: 'available' }).toArray();
+
+      // Get all active rentals that overlap with the requested dates
+      const activeRentals = await db.collection('rentals').find({
+        status: 'active',
+        $or: [
+          { startDate: { $lte: requestEnd }, endDate: null },
+          { startDate: { $lte: requestEnd }, endDate: { $gte: requestStart } }
+        ]
+      }).toArray();
+
+      // Get all approved/open reservations that overlap (excluding current reservation if editing)
+      const reservationQuery = {
+        status: { $in: ['approved', 'open'] },
+        $or: [
+          { pickupDate: { $lte: requestEnd }, returnDate: { $gte: requestStart } },
+          { startDate: { $lte: requestEnd }, endDate: { $gte: requestStart } }
+        ]
+      };
+
+      // Exclude current reservation if editing
+      if (reservationId) {
+        reservationQuery._id = { $ne: reservationId };
+      }
+
+      const overlappingReservations = await db.collection('reservations').find(reservationQuery).toArray();
+
+      // Get car IDs that are not available
+      const unavailableCarIds = new Set([
+        ...activeRentals.map(r => r.carId),
+        ...overlappingReservations.map(r => r.carId)
+      ]);
+
+      // Filter available cars
+      const availableCars = allCars.filter(car => !unavailableCarIds.has(car._id));
+
+      // Format response with essential info for dropdown
+      const formattedCars = availableCars.map(car => ({
+        _id: car._id,
+        name: car.name,
+        brand: car.brand,
+        model: car.model,
+        vehicleKey: car.vehicleKey,
+        vehicleClass: car.vehicleClass,
+        transmission: car.transmission,
+        displayName: `${car.brand} ${car.model} - ${car.vehicleKey || car.name}`,
+        imageUrl: car.imageUrl,
+        status: car.status
+      }));
+
+      return NextResponse.json({
+        success: true,
+        data: formattedCars,
+        count: formattedCars.length,
+        dateRange: {
+          startDate: requestStart,
+          endDate: requestEnd
+        }
+      });
     }
 
     // Get all maintenance records (public)

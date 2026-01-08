@@ -51,6 +51,8 @@ export default function App() {
   const [editingRepairOrder, setEditingRepairOrder] = useState(null);
   const [maintenanceView, setMaintenanceView] = useState('schedule'); // 'schedule' or 'repairs'
   const [financialAnalytics, setFinancialAnalytics] = useState([]);
+  const [availableVehiclesForReservation, setAvailableVehiclesForReservation] = useState([]);
+  const [loadingAvailableVehicles, setLoadingAvailableVehicles] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -521,6 +523,56 @@ export default function App() {
     }
   };
 
+  // Fetch available vehicles for reservation assignment
+  const fetchAvailableVehiclesForReservation = async (reservation) => {
+    if (!reservation) return;
+
+    setLoadingAvailableVehicles(true);
+    try {
+      const pickupDate = reservation.pickupDate || reservation.startDate;
+      const returnDate = reservation.returnDate || reservation.endDate;
+
+      if (!pickupDate || !returnDate) {
+        toast({
+          title: 'Warning',
+          description: 'Pickup and return dates are required to check vehicle availability',
+          variant: 'destructive'
+        });
+        setAvailableVehiclesForReservation([]);
+        return;
+      }
+
+      const startDateStr = new Date(pickupDate).toISOString().split('T')[0];
+      const endDateStr = new Date(returnDate).toISOString().split('T')[0];
+
+      const res = await fetch(
+        `/api/reservations/available-vehicles?reservationId=${reservation._id}&startDate=${startDateStr}&endDate=${endDateStr}`
+      );
+      const data = await res.json();
+
+      if (data.success) {
+        setAvailableVehiclesForReservation(data.data);
+
+        if (data.count === 0) {
+          toast({
+            title: 'No Vehicles Available',
+            description: `No vehicles are available for ${startDateStr} to ${endDateStr}`,
+            variant: 'destructive'
+          });
+        }
+      } else {
+        toast({ title: 'Error', description: data.error, variant: 'destructive' });
+        setAvailableVehiclesForReservation([]);
+      }
+    } catch (error) {
+      console.error('Error fetching available vehicles:', error);
+      toast({ title: 'Error', description: 'Failed to fetch available vehicles', variant: 'destructive' });
+      setAvailableVehiclesForReservation([]);
+    } finally {
+      setLoadingAvailableVehicles(false);
+    }
+  };
+
   const handleDeleteReservation = async (reservationId) => {
     if (!confirm('Are you sure you want to delete this reservation?')) return;
 
@@ -933,7 +985,7 @@ export default function App() {
                     {car.brand} {car.model}
                   </CardDescription>
                   <div className="mb-4">
-                    <p className="text-2xl font-bold text-blue-600">₹{car.price}/month</p>
+                    <p className="text-2xl font-bold text-blue-600">${car.price}/month</p>
                   </div>
                   {car.features && car.features.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-4">
@@ -965,7 +1017,7 @@ export default function App() {
             <DialogHeader>
               <DialogTitle>Request Reservation</DialogTitle>
               <DialogDescription>
-                {selectedCar && `${selectedCar.name} - ₹${selectedCar.price}/month`}
+                {selectedCar && `${selectedCar.name} - $${selectedCar.price}/month`}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={(e) => {
@@ -1405,7 +1457,7 @@ export default function App() {
                         {car.status}
                       </Badge>
                     </div>
-                    <p className="text-xl font-bold text-blue-600">₹{car.price}/month</p>
+                    <p className="text-xl font-bold text-blue-600">${car.price}/month</p>
                   </CardContent>
                   <CardFooter className="flex gap-2">
                     <Button
@@ -1574,20 +1626,20 @@ export default function App() {
                       {reservation.assignedVehicle || 'Not Assigned'}
                     </TableCell>
                     <TableCell className="text-right">
-                      ₹{(reservation.totalPrice || 0).toFixed(2)}
+                      ${(reservation.totalPrice || 0).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">
-                      ₹{(reservation.totalRevenue || reservation.totalPrice || 0).toFixed(2)}
+                      ${(reservation.totalRevenue || reservation.totalPrice || 0).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">
-                      ₹{(reservation.totalPaid || 0).toFixed(2)}
+                      ${(reservation.totalPaid || 0).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">
-                      ₹{(reservation.totalRefunded || 0).toFixed(2)}
+                      ${(reservation.totalRefunded || 0).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       <span className={reservation.outstandingBalance > 0 ? 'text-red-600' : 'text-green-600'}>
-                        ₹{(reservation.outstandingBalance || 0).toFixed(2)}
+                        ${(reservation.outstandingBalance || 0).toFixed(2)}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -1615,7 +1667,7 @@ export default function App() {
                       {reservation.totalDays || 0}
                     </TableCell>
                     <TableCell className="text-right">
-                      ₹{(reservation.dailyRate || 0).toFixed(2)}
+                      ${(reservation.dailyRate || 0).toFixed(2)}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -1686,25 +1738,25 @@ export default function App() {
                   <div>
                     <span className="text-gray-600">Total Price: </span>
                     <span className="font-bold">
-                      ₹{getFilteredReservations().reduce((sum, r) => sum + (r.totalPrice || 0), 0).toFixed(2)}
+                      ${getFilteredReservations().reduce((sum, r) => sum + (r.totalPrice || 0), 0).toFixed(2)}
                     </span>
                   </div>
                   <div>
                     <span className="text-gray-600">Total Revenue: </span>
                     <span className="font-bold">
-                      ₹{getFilteredReservations().reduce((sum, r) => sum + (r.totalRevenue || r.totalPrice || 0), 0).toFixed(2)}
+                      ${getFilteredReservations().reduce((sum, r) => sum + (r.totalRevenue || r.totalPrice || 0), 0).toFixed(2)}
                     </span>
                   </div>
                   <div>
                     <span className="text-gray-600">Total Paid: </span>
                     <span className="font-bold">
-                      ₹{getFilteredReservations().reduce((sum, r) => sum + (r.totalPaid || 0), 0).toFixed(2)}
+                      ${getFilteredReservations().reduce((sum, r) => sum + (r.totalPaid || 0), 0).toFixed(2)}
                     </span>
                   </div>
                   <div>
                     <span className="text-gray-600">Outstanding: </span>
                     <span className="font-bold text-red-600">
-                      ₹{getFilteredReservations().reduce((sum, r) => sum + (r.outstandingBalance || 0), 0).toFixed(2)}
+                      ${getFilteredReservations().reduce((sum, r) => sum + (r.outstandingBalance || 0), 0).toFixed(2)}
                     </span>
                   </div>
                   <div>
@@ -1751,7 +1803,7 @@ export default function App() {
                     <TableCell>{rental.carDetails.name}</TableCell>
                     <TableCell>{new Date(rental.startDate).toLocaleDateString()}</TableCell>
                     <TableCell>{rental.endDate ? new Date(rental.endDate).toLocaleDateString() : 'Ongoing'}</TableCell>
-                    <TableCell>₹{rental.monthlyPrice}</TableCell>
+                    <TableCell>${rental.monthlyPrice}</TableCell>
                     <TableCell>
                       <Badge variant={rental.status === 'active' ? 'default' : 'secondary'}>
                         {rental.status}
@@ -2073,7 +2125,7 @@ export default function App() {
                   <TableRow key={payment._id}>
                     <TableCell>{payment.rentalDetails.customerName}</TableCell>
                     <TableCell>{payment.rentalDetails.carName}</TableCell>
-                    <TableCell>₹{payment.amount}</TableCell>
+                    <TableCell>${payment.amount}</TableCell>
                     <TableCell>{new Date(payment.dueDate).toLocaleDateString()}</TableCell>
                     <TableCell>{payment.paidDate ? new Date(payment.paidDate).toLocaleDateString() : '-'}</TableCell>
                     <TableCell>
@@ -2330,7 +2382,7 @@ export default function App() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="price">Monthly Price (₹)</Label>
+                  <Label htmlFor="price">Monthly Price ($)</Label>
                   <Input id="price" name="price" type="number" defaultValue={editingCar?.price} required />
                 </div>
                 <div>
@@ -2562,7 +2614,7 @@ export default function App() {
                   <SelectContent>
                     {cars.filter(car => car.status === 'available').map((car) => (
                       <SelectItem key={car._id} value={car._id}>
-                        {car.name} - ₹{car.price}/month
+                        {car.name} - ${car.price}/month
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2585,7 +2637,7 @@ export default function App() {
                 <Input id="startDate" name="startDate" type="date" required />
               </div>
               <div>
-                <Label htmlFor="monthlyPrice">Monthly Price (₹)</Label>
+                <Label htmlFor="monthlyPrice">Monthly Price ($)</Label>
                 <Input id="monthlyPrice" name="monthlyPrice" type="number" required />
               </div>
               <Button type="submit" className="w-full">Create Rental</Button>
@@ -2627,7 +2679,7 @@ export default function App() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="amount">Amount (₹)</Label>
+                <Label htmlFor="amount">Amount ($)</Label>
                 <Input id="amount" name="amount" type="number" required />
               </div>
               <div>
@@ -2645,7 +2697,13 @@ export default function App() {
       </Dialog>
 
       {/* Edit Reservation Dialog */}
-      <Dialog open={showEditReservationDialog} onOpenChange={setShowEditReservationDialog}>
+      <Dialog open={showEditReservationDialog} onOpenChange={(open) => {
+        setShowEditReservationDialog(open);
+        // Clear available vehicles when dialog closes
+        if (!open) {
+          setAvailableVehiclesForReservation([]);
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingReservation ? 'Edit Reservation' : 'New Reservation'}</DialogTitle>
@@ -2656,6 +2714,29 @@ export default function App() {
           <form onSubmit={(e) => {
             e.preventDefault();
             const formData = new FormData(e.target);
+            let assignedVehicle = formData.get('assignedVehicle');
+
+            // Convert special values to empty string
+            if (assignedVehicle === 'NOT_ASSIGNED' || assignedVehicle === 'NO_VEHICLES_AVAILABLE') {
+              assignedVehicle = '';
+            }
+
+            // Validate assigned vehicle is in available vehicles list
+            if (assignedVehicle && assignedVehicle !== '') {
+              const isVehicleAvailable = availableVehiclesForReservation.some(
+                vehicle => vehicle.displayName === assignedVehicle
+              );
+
+              if (!isVehicleAvailable && availableVehiclesForReservation.length > 0) {
+                toast({
+                  title: 'Invalid Vehicle Selection',
+                  description: 'The selected vehicle is no longer available for the chosen dates. Please refresh the list and select an available vehicle.',
+                  variant: 'destructive'
+                });
+                return;
+              }
+            }
+
             handleEditReservation({
               customerName: formData.get('customerName'),
               email: formData.get('email'),
@@ -2666,7 +2747,7 @@ export default function App() {
               returnDate: formData.get('returnDate'),
               returnTime: formData.get('returnTime'),
               returnLocation: formData.get('returnLocation'),
-              assignedVehicle: formData.get('assignedVehicle'),
+              assignedVehicle: assignedVehicle,
               totalPaid: formData.get('totalPaid'),
               totalRefunded: formData.get('totalRefunded'),
               notes: formData.get('notes'),
@@ -2725,6 +2806,16 @@ export default function App() {
                       type="date"
                       defaultValue={editingReservation?.pickupDate ? new Date(editingReservation.pickupDate).toISOString().split('T')[0] : editingReservation?.startDate ? new Date(editingReservation.startDate).toISOString().split('T')[0] : ''}
                       required
+                      onChange={(e) => {
+                        const returnDateInput = document.getElementById('editReturnDate');
+                        if (e.target.value && returnDateInput?.value) {
+                          fetchAvailableVehiclesForReservation({
+                            ...editingReservation,
+                            pickupDate: e.target.value,
+                            returnDate: returnDateInput.value
+                          });
+                        }
+                      }}
                     />
                   </div>
                   <div>
@@ -2759,6 +2850,16 @@ export default function App() {
                       type="date"
                       defaultValue={editingReservation?.returnDate ? new Date(editingReservation.returnDate).toISOString().split('T')[0] : editingReservation?.endDate ? new Date(editingReservation.endDate).toISOString().split('T')[0] : ''}
                       required
+                      onChange={(e) => {
+                        const pickupDateInput = document.getElementById('editPickupDate');
+                        if (e.target.value && pickupDateInput?.value) {
+                          fetchAvailableVehiclesForReservation({
+                            ...editingReservation,
+                            pickupDate: pickupDateInput.value,
+                            returnDate: e.target.value
+                          });
+                        }
+                      }}
                     />
                   </div>
                   <div>
@@ -2786,13 +2887,55 @@ export default function App() {
                 <h3 className="font-semibold mb-3">Vehicle Assignment</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="editAssignedVehicle">Assigned Vehicle</Label>
-                    <Input
-                      id="editAssignedVehicle"
+                    <div className="flex items-center justify-between mb-2">
+                      <Label htmlFor="editAssignedVehicle">Assigned Vehicle</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => fetchAvailableVehiclesForReservation(editingReservation)}
+                        disabled={loadingAvailableVehicles}
+                      >
+                        {loadingAvailableVehicles ? 'Loading...' : 'Refresh Available'}
+                      </Button>
+                    </div>
+                    <Select
                       name="assignedVehicle"
-                      defaultValue={editingReservation?.assignedVehicle || ''}
-                      placeholder="e.g., Jeep Grand Cherokee Overland 4X2 - 191"
-                    />
+                      defaultValue={editingReservation?.assignedVehicle || 'NOT_ASSIGNED'}
+                      onOpenChange={(open) => {
+                        if (open && availableVehiclesForReservation.length === 0) {
+                          fetchAvailableVehiclesForReservation(editingReservation);
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="editAssignedVehicle">
+                        <SelectValue placeholder={loadingAvailableVehicles ? "Loading vehicles..." : "Select a vehicle"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableVehiclesForReservation.length === 0 && !loadingAvailableVehicles ? (
+                          <SelectItem value="NO_VEHICLES_AVAILABLE" disabled>No vehicles available for selected dates</SelectItem>
+                        ) : (
+                          <>
+                            <SelectItem value="NOT_ASSIGNED">Not Assigned</SelectItem>
+                            {availableVehiclesForReservation.map((vehicle) => (
+                              <SelectItem key={vehicle._id} value={vehicle.displayName}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{vehicle.displayName}</span>
+                                  <span className="text-xs text-gray-500">
+                                    {vehicle.vehicleClass} • {vehicle.transmission}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {availableVehiclesForReservation.length > 0 && (
+                      <p className="text-xs text-green-600 mt-1">
+                        {availableVehiclesForReservation.length} vehicle{availableVehiclesForReservation.length !== 1 ? 's' : ''} available
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="editStatus">Status *</Label>
@@ -2816,7 +2959,7 @@ export default function App() {
                 <h3 className="font-semibold mb-3">Financial Information</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="editTotalPaid">Total Paid (₹)</Label>
+                    <Label htmlFor="editTotalPaid">Total Paid ($)</Label>
                     <Input
                       id="editTotalPaid"
                       name="totalPaid"
@@ -2826,7 +2969,7 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="editTotalRefunded">Total Refunded (₹)</Label>
+                    <Label htmlFor="editTotalRefunded">Total Refunded ($)</Label>
                     <Input
                       id="editTotalRefunded"
                       name="totalRefunded"

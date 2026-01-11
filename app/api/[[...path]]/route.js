@@ -110,7 +110,16 @@ export async function GET(request) {
   try {
     const { db } = await connectToDatabase();
     const url = new URL(request.url);
-    const path = url.pathname.replace('/api', '');
+    const path = url.pathname.replace('/api', '') || '/';
+
+    // Health check / API root
+    if (path === '/' || path === '') {
+      return NextResponse.json({
+        success: true,
+        message: 'Deccan Car Rental API',
+        version: '1.0.0'
+      });
+    }
 
     // Get all cars (public)
     if (path === '/cars') {
@@ -436,7 +445,7 @@ export async function POST(request) {
   try {
     const { db } = await connectToDatabase();
     const url = new URL(request.url);
-    const path = url.pathname.replace('/api', '');
+    const path = url.pathname.replace('/api', '') || '/';
     const body = await request.json();
 
     // Admin login
@@ -977,7 +986,7 @@ export async function PUT(request) {
   try {
     const { db } = await connectToDatabase();
     const url = new URL(request.url);
-    const path = url.pathname.replace('/api', '');
+    const path = url.pathname.replace('/api', '') || '/';
     const body = await request.json();
 
     const authHeader = request.headers.get('authorization');
@@ -1300,7 +1309,7 @@ export async function DELETE(request) {
   try {
     const { db } = await connectToDatabase();
     const url = new URL(request.url);
-    const path = url.pathname.replace('/api', '');
+    const path = url.pathname.replace('/api', '') || '/';
 
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
